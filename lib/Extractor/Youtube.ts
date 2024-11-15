@@ -362,122 +362,167 @@ export class YoutubeiExtractor extends BaseExtractor<YoutubeiOptions> {
 
     switch (context.type) {
       case QueryType.YOUTUBE_PLAYLIST: {
-	let playlist
-	const playlistUrl = new URL(query);
-	if (playlistUrl.searchParams.has("v") && playlistUrl.searchParams.has("list")) {
-		playlist = await YouTube.getPlaylist(query, {
-                    fetchAll: true,
-                    requestOptions: context.requestOptions as unknown as RequestInit
-		})
-	} else {
-		const plId = playlistUrl.searchParams.get("list")!;
-		playlist = await this.innerTube.getPlaylist(plId);
-	};
+        const playlistUrl = new URL(query);
+        if (playlistUrl.searchParams.has("v") && playlistUrl.searchParams.has("list")) {
+          const playlist = await YouTube.getPlaylist(query, {
+            fetchAll: true,
+            requestOptions: context.requestOptions as unknown as RequestInit
+          })
+          if (!ytpl) return this.#emptyResponse();
 
-        const pl = new Playlist(this.context.player, {
-          title: playlist.info.title ?? "UNKNOWN PLAYLIST",
-          thumbnail: playlist.info.thumbnails[0].url,
-          description:
-            playlist.info.description ??
-            playlist.info.title ??
-            "UNKNOWN DESCRIPTION",
-          type: "playlist",
-          author: {
-            name:
-              playlist?.channels[0]?.author?.name ??
-              playlist.info.author.name ??
-              "UNKNOWN AUTHOR",
-            url:
-              playlist?.channels[0]?.author?.url ??
-              playlist.info.author.url ??
-              "UNKNOWN AUTHOR",
-          },
-          tracks: [],
-          id: plId,
-          url: query,
-          source: "youtube",
-        });
-
-        pl.tracks = [];
-
-        let plTracks = (
-          playlist.videos.filter(
-            (v) => v.type === "PlaylistVideo",
-          ) as PlaylistVideo[]
-        ).map((v) => {
-          const duration = Util.buildTimeCode(
-            Util.parseMS(v.duration.seconds * 1000),
-          );
-          const raw = {
-            duration_ms: v.duration.seconds * 1000,
-            live: v.is_live,
-            duration,
-          };
-
-          return new Track(this.context.player, {
-            title: v.title.text ?? "UNKNOWN TITLE",
-            duration: duration,
-            thumbnail: v.thumbnails[0]?.url,
-            author: v.author.name,
-            requestedBy: context.requestedBy,
-            url: `https://youtube.com/watch?v=${v.id}`,
-            raw,
-            playlist: pl,
-            source: "youtube",
-            queryType: "youtubeVideo",
-            async requestMetadata() {
-              return this.raw;
-            },
-            metadata: raw,
-            live: v.is_live,
+          const playlist = new Playlist(this.context.player, {
+              title: ytpl.title!,
+              thumbnail: ytpl.thumbnail?.displayThumbnailURL('maxresdefault') as string,
+              description: ytpl.title || '',
+              type: 'playlist',
+              source: 'youtube',
+              author: {
+                  name: ytpl.channel!.name as string,
+                  url: ytpl.channel!.url as string
+              },
+              tracks: [],
+              id: ytpl.id as string,
+              url: ytpl.url as string,
+              rawPlaylist: ytpl
           });
-        });
 
-        while (playlist.has_continuation) {
-          playlist = await playlist.getContinuation();
-
-          plTracks.push(
-            ...(
-              playlist.videos.filter(
-                (v) => v.type === "PlaylistVideo",
-              ) as PlaylistVideo[]
-            ).map((v) => {
-              const duration = Util.buildTimeCode(
-                Util.parseMS(v.duration.seconds * 1000),
-              );
-              const raw = {
-                duration_ms: v.duration.seconds * 1000,
-                live: v.is_live,
-                duration,
-              };
-
-              return new Track(this.context.player, {
-                title: v.title.text ?? "UNKNOWN TITLE",
-                duration,
-                thumbnail: v.thumbnails[0]?.url,
-                author: v.author.name,
-                requestedBy: context.requestedBy,
-                url: `https://youtube.com/watch?v=${v.id}`,
-                raw,
-                playlist: pl,
-                source: "youtube",
-                queryType: "youtubeVideo",
-                async requestMetadata() {
-                  return this.raw;
-                },
-                metadata: raw,
-                live: v.is_live,
+          playlist.tracks = ytpl.videos.map((video) => {
+              const track = new Track(this.context.player, {
+                  title: video.title as string,
+                  description: video.description as string,
+                  author: video.channel?.name as string,
+                  url: video.url,
+                  requestedBy: context.requestedBy,
+                  thumbnail: video.thumbnail!.url as string,
+                  views: video.views,
+                  duration: video.durationFormatted,
+                  raw: video,
+                  playlist: playlist,
+                  source: 'youtube',
+                  queryType: 'youtubeVideo',
+                  metadata: video,
+                  async requestMetadata() {
+                      return video;
+                  },
+                  live: video.live
               });
-            }),
-          );
+
+              track.extractor = this;
+              track.playlist = playlist;
+              return track;
+          });
+          
+          return { playlist, tracks: playlist.tracks };
+
+        } else {
+          const plId = playlistUrl.searchParams.get("list")!;
+          const playlist = await this.innerTube.getPlaylist(plId);
+
+          const pl = new Playlist(this.context.player, {
+            title: playlist.info.title ?? "UNKNOWN PLAYLIST",
+            thumbnail: playlist.info.thumbnails[0].url,
+            description:
+              playlist.info.description ??
+              playlist.info.title ??
+              "UNKNOWN DESCRIPTION",
+            type: "playlist",
+            author: {
+              name:
+                playlist?.channels[0]?.author?.name ??
+                playlist.info.author.name ??
+                "UNKNOWN AUTHOR",
+              url:
+                playlist?.channels[0]?.author?.url ??
+                playlist.info.author.url ??
+                "UNKNOWN AUTHOR",
+            },
+            tracks: [],
+            id: plId,
+            url: query,
+            source: "youtube",
+          });
+
+          pl.tracks = [];
+
+          let plTracks = (
+            playlist.videos.filter(
+              (v) => v.type === "PlaylistVideo",
+            ) as PlaylistVideo[]
+          ).map((v) => {
+            const duration = Util.buildTimeCode(
+              Util.parseMS(v.duration.seconds * 1000),
+            );
+            const raw = {
+              duration_ms: v.duration.seconds * 1000,
+              live: v.is_live,
+              duration,
+            };
+
+            return new Track(this.context.player, {
+              title: v.title.text ?? "UNKNOWN TITLE",
+              duration: duration,
+              thumbnail: v.thumbnails[0]?.url,
+              author: v.author.name,
+              requestedBy: context.requestedBy,
+              url: `https://youtube.com/watch?v=${v.id}`,
+              raw,
+              playlist: pl,
+              source: "youtube",
+              queryType: "youtubeVideo",
+              async requestMetadata() {
+                return this.raw;
+              },
+              metadata: raw,
+              live: v.is_live,
+            });
+          });
+
+          while (playlist.has_continuation) {
+            playlist = await playlist.getContinuation();
+
+            plTracks.push(
+              ...(
+                playlist.videos.filter(
+                  (v) => v.type === "PlaylistVideo",
+                ) as PlaylistVideo[]
+              ).map((v) => {
+                const duration = Util.buildTimeCode(
+                  Util.parseMS(v.duration.seconds * 1000),
+                );
+                const raw = {
+                  duration_ms: v.duration.seconds * 1000,
+                  live: v.is_live,
+                  duration,
+                };
+
+                return new Track(this.context.player, {
+                  title: v.title.text ?? "UNKNOWN TITLE",
+                  duration,
+                  thumbnail: v.thumbnails[0]?.url,
+                  author: v.author.name,
+                  requestedBy: context.requestedBy,
+                  url: `https://youtube.com/watch?v=${v.id}`,
+                  raw,
+                  playlist: pl,
+                  source: "youtube",
+                  queryType: "youtubeVideo",
+                  async requestMetadata() {
+                    return this.raw;
+                  },
+                  metadata: raw,
+                  live: v.is_live,
+                });
+              }),
+            );
+          }
+
+          pl.tracks = plTracks;
+
+          return {
+            playlist: pl,
+            tracks: pl.tracks,
+          };
         }
-
-        pl.tracks = plTracks;
-
-        return {
-          playlist: pl,
-          tracks: pl.tracks,
-        };
       }
       case QueryType.YOUTUBE_VIDEO: {
         let videoId = new URL(query).searchParams.get("v");

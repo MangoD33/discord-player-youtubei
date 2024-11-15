@@ -15,6 +15,7 @@ import {
 } from "discord-player";
 
 import Innertube, { Platform, YTNodes } from "youtubei.js";
+import { YouTube } from 'youtube-sr';
 import { Agent } from "undici";
 import {
   type DownloadOptions,
@@ -361,18 +362,19 @@ export class YoutubeiExtractor extends BaseExtractor<YoutubeiOptions> {
     if (!query.includes("list=RD") && YouTubeExtractor.validateURL(query))
       context.type = QueryType.YOUTUBE_VIDEO;
 
-    if (context.type === QueryType.YOUTUBE_PLAYLIST) {
-      const url = new URL(query);
-
-      if (url.searchParams.has("v") && url.searchParams.has("list"))
-        context.type = QueryType.YOUTUBE_VIDEO;
-    }
-
     switch (context.type) {
       case QueryType.YOUTUBE_PLAYLIST: {
-        const playlistUrl = new URL(query);
-        const plId = playlistUrl.searchParams.get("list")!;
-        let playlist = await this.innerTube.getPlaylist(plId);
+	let playlist
+	const playlistUrl = new URL(query);
+	if (playlistUrl.searchParams.has("v") && playlistUrl.searchParams.has("list")) {
+		playlist = await YouTube.getPlaylist(query, {
+                    fetchAll: true,
+                    requestOptions: context.requestOptions as unknown as RequestInit
+		})
+	} else {
+		const plId = playlistUrl.searchParams.get("list")!;
+		playlist = await this.innerTube.getPlaylist(plId);
+	};
 
         const pl = new Playlist(this.context.player, {
           title: playlist.info.title ?? "UNKNOWN PLAYLIST",

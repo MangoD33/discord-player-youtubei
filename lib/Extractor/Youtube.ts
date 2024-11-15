@@ -364,7 +364,7 @@ export class YoutubeiExtractor extends BaseExtractor<YoutubeiOptions> {
       case QueryType.YOUTUBE_PLAYLIST: {
         const playlistUrl = new URL(query);
         if (playlistUrl.searchParams.has("v") && playlistUrl.searchParams.has("list")) {
-          const playlist = await YouTube.getPlaylist(query, {
+          const ytpl = await YouTube.getPlaylist(query, {
             fetchAll: true,
             requestOptions: context.requestOptions as unknown as RequestInit
           })
@@ -416,7 +416,7 @@ export class YoutubeiExtractor extends BaseExtractor<YoutubeiOptions> {
 
         } else {
           const plId = playlistUrl.searchParams.get("list")!;
-          const playlist = await this.innerTube.getPlaylist(plId);
+          let playlist = await this.innerTube.getPlaylist(plId);
 
           const pl = new Playlist(this.context.player, {
             title: playlist.info.title ?? "UNKNOWN PLAYLIST",
